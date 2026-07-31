@@ -8,6 +8,9 @@ use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DBProjectController;
 use App\Http\Controllers\DataItemController;
 use App\Http\Controllers\SiteVisitController;
+use App\Http\Controllers\LeadController;
+use App\Http\Controllers\EmployeeTaskController;
+use App\Http\Controllers\EmployeeAuthController;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
 
@@ -16,7 +19,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::any('/employees', function (Request $request) {
         $controller = app(EmployeeController::class);
-        return match ($request->method()) {
+        $method = $request->method();
+        
+        // Handle _method override for multipart/form-data (file uploads send as POST with _method=PUT)
+        if ($method === 'POST' && $request->input('_method') === 'PUT') {
+            return $controller->update($request);
+        }
+        
+        return match ($method) {
             'GET' => $controller->index(),
             'POST' => $controller->store($request),
             'PUT' => $controller->update($request),
@@ -58,8 +68,97 @@ Route::middleware('auth:sanctum')->group(function () {
         };
     });
 
-    Route::any('/stats', function (Request $request) {
-        // Mock stats or implement properly
-        return response()->json(['message' => 'Stats endpoint not fully implemented yet']);
+        Route::any('/leads', function (Request $request) {
+        $controller = app(LeadController::class);
+        return match ($request->method()) {
+            'GET' => $controller->index(),
+            'POST' => $controller->store($request),
+            'PUT' => $controller->update($request),
+            'DELETE' => $controller->destroy($request),
+            default => response()->json(['error' => 'Method not allowed'], 405),
+        };
+    });
+
+    Route::any('/tasks', function (Request $request) {
+        $controller = app(EmployeeTaskController::class);
+        return match ($request->method()) {
+            'GET' => $controller->index(),
+            'POST' => $controller->store($request),
+            'PUT' => $controller->update($request),
+            'DELETE' => $controller->destroy($request),
+            default => response()->json(['error' => 'Method not allowed'], 405),
+        };
+    });
+
+    
+    // Employee specific routes
+    Route::post('/employee/login', [EmployeeAuthController::class, 'login']);
+    
+    // For employee dashboard, protected by sanctum
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/employee/logout', [EmployeeAuthController::class, 'logout']);
+        Route::get('/employee/me', [EmployeeAuthController::class, 'me']);
+        
+        Route::get('/employee/tasks', function (Request $request) {
+            return response()->json(
+                \App\Models\EmployeeTask::where('employee_id', $request->user()->id)
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+            );
+        });
+        
+        Route::put('/employee/tasks', function (Request $request) {
+            $task = \App\Models\EmployeeTask::where('id', $request->id)
+                ->where('employee_id', $request->user()->id)
+                ->first();
+            if ($task) {
+                $task->update(['status' => $request->status]);
+                return response()->json($task);
+            }
+            return response()->json(['error' => 'Not found or unauthorized'], 404);
+        });
+
+        Route::get('/employee/projects', function (Request $request) {
+            return response()->json(
+                $request->user()->projects // Note: requires projects relation on Employee
+            );
+        });
+    });
+
+        Route::any('/stats', function (Request $request) {
+        $employees = \App\Models\Employee::count();
+        $activeProjectsCount = \App\Models\DBProject::where('status', 'IN_PROGRESS')->count();
+        $pendingProjectsCount = \App\Models\DBProject::where('status', 'PENDING')->count();
+        $totalLeads = \App\Models\Lead::count();
+
+        // Get tasks grouped by employee
+        $employeeTasks = \App\Models\Employee::with('tasks')->get()->map(function ($emp) {
+            $tasks = $emp->tasks;
+            return [
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'position' => $emp->position,
+                'total_tasks' => $tasks->count(),
+                'pending' => $tasks->where('status', 'PENDING')->count(),
+                'in_progress' => $tasks->where('status', 'IN_PROGRESS')->count(),
+                'completed' => $tasks->where('status', 'COMPLETED')->count(),
+            ];
+        });
+
+        // Get latest 5 tasks across company
+        $recentTasks = \App\Models\EmployeeTask::with('employee:id,name')
+            ->orderBy('updated_at', 'desc')
+            ->take(5)
+            ->get();
+
+        return response()->json([
+            'employees' => $employees,
+            'activeProjectsCount' => $activeProjectsCount,
+            'pendingProjectsCount' => $pendingProjectsCount,
+            'totalLeads' => $totalLeads,
+            'employeeTasks' => $employeeTasks,
+            'recentTasks' => $recentTasks,
+            'totalVisits' => rand(100, 500) // Mocking this since no visitor tracking table exists
+        ]);
     });
 });
