@@ -15,7 +15,7 @@ class DBProjectController extends Controller
 
         public function store(Request $request)
     {
-        $data = \App\Models\DBProject::create($request->except('employee_ids'));
+        $data = \App\Models\DBProject::create($request->except(['employee_ids', 'employees']));
         if ($request->has('employee_ids')) {
             $data->employees()->sync($request->employee_ids);
         }
@@ -27,7 +27,7 @@ class DBProjectController extends Controller
         if (!$request->id) return response()->json(['error' => 'ID required'], 400);
         $data = \App\Models\DBProject::find($request->id);
         if ($data) {
-            $data->update($request->except('employee_ids'));
+            $data->update($request->except(['employee_ids', 'employees']));
             if ($request->has('employee_ids')) {
                 $data->employees()->sync($request->employee_ids);
             }
