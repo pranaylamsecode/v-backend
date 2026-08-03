@@ -11,6 +11,7 @@ use App\Http\Controllers\SiteVisitController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\EmployeeTaskController;
 use App\Http\Controllers\EmployeeAuthController;
+use App\Http\Controllers\WorkLogController;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
 
@@ -123,7 +124,12 @@ Route::middleware('auth:sanctum')->group(function () {
                 $request->user()->projects // Note: requires projects relation on Employee
             );
         });
+
+        Route::get('/employee/work-logs', [WorkLogController::class, 'employeeIndex']);
+        Route::post('/employee/work-logs', [WorkLogController::class, 'store']);
     });
+
+    Route::get('/work-logs', [WorkLogController::class, 'index']);
 
         Route::any('/stats', function (Request $request) {
         $employees = \App\Models\Employee::count();
