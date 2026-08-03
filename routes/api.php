@@ -341,4 +341,116 @@ Route::middleware('auth:sanctum')->group(function () {
 
         return response()->json($feature->load('assignedEmployee'));
     });
+
+    // ========== LEAVE REQUESTS ==========
+    Route::get('/leave-requests', function (Request $request) {
+        $query = \App\Models\LeaveRequest::with('employee:id,name,position,photo_url')->orderBy('created_at', 'desc');
+        
+        // If employee_id is provided, filter by that employee
+        if ($request->query('employee_id')) {
+            $query->where('employee_id', $request->query('employee_id'));
+        }
+        
+        return response()->json($query->get());
+    });
+
+    Route::post('/leave-requests', function (Request $request) {
+        $leave = \App\Models\LeaveRequest::create($request->all());
+
+        // Notify admin about new leave request
+        $employee = \App\Models\Employee::find($request->employee_id);
+        \App\Models\Notification::create([
+            'user_type' => 'admin',
+            'user_id' => null,
+            'title' => 'New Leave Request',
+            'message' => ($employee ? $employee->name : 'An employee') . ' has requested ' . $request->leave_type . ' leave from ' . $request->start_date . ' to ' . $request->end_date,
+            'type' => 'LEAVE',
+        ]);
+
+        return response()->json($leave->load('employee'), 201);
+    });
+
+    Route::put('/leave-requests', function (Request $request) {
+        if (!$request->id) return response()->json(['error' => 'ID required'], 400);
+        $leave = \App\Models\LeaveRequest::find($request->id);
+        if (!$leave) return response()->json(['error' => 'Not found'], 404);
+        $leave->update($request->except(['id', 'employee']));
+
+        // Notify employee about status change
+        if ($request->status && in_array($request->status, ['APPROVED', 'REJECTED'])) {
+            \App\Models\Notification::create([
+                'user_type' => 'employee',
+                'user_id' => $leave->employee_id,
+                'title' => 'Leave ' . $request->status,
+                'message' => 'Your ' . $leave->leave_type . ' leave request from ' . $leave->start_date->format('M d') . ' to ' . $leave->end_date->format('M d') . ' has been ' . strtolower($request->status) . '.' . ($request->admin_notes ? ' Note: ' . $request->admin_notes : ''),
+                'type' => 'LEAVE',
+            ]);
+        }
+
+        return response()->json($leave->load('employee'));
+    });
+
+    // ========== ANNOUNCEMENTS ==========
+    Route::get('/announcements', function () {
+        return response()->json(
+            \App\Models\Announcement::orderBy('created_at', 'desc')->get()
+        );
+    });
+
+    Route::post('/announcements', function (Request $request) {
+        $ann = \App\Models\Announcement::create($request->all());
+
+        // Notify all employees
+        $employees = \App\Models\Employee::all();
+        foreach ($employees as $emp) {
+            \App\Models\Notification::create([
+                'user_type' => 'employee',
+                'user_id' => $emp->id,
+                'title' => 'New Announcement: ' . $request->title,
+                'message' => \Illuminate\Support\Str::limit($request->content, 100),
+                'type' => 'ANNOUNCEMENT',
+            ]);
+        }
+
+        return response()->json($ann, 201);
+    });
+
+    Route::delete('/announcements', function (Request $request) {
+        if (!$request->query('id')) return response()->json(['error' => 'ID required'], 400);
+        \App\Models\Announcement::destroy($request->query('id'));
+        return response()->json(['success' => true]);
+    });
+
+    // ========== NOTIFICATIONS ==========
+    Route::get('/notifications', function (Request $request) {
+        $userType = $request->query('user_type', 'admin');
+        $userId = $request->query('user_id');
+
+        $query = \App\Models\Notification::where('user_type', $userType)->orderBy('created_at', 'desc');
+
+        if ($userType === 'employee' && $userId) {
+            $query->where('user_id', $userId);
+        }
+
+        return response()->json($query->take(50)->get());
+    });
+
+    Route::put('/notifications/read', function (Request $request) {
+        $userType = $request->user_type ?? 'admin';
+        $userId = $request->user_id;
+
+        $query = \App\Models\Notification::where('user_type', $userType)->where('is_read', false);
+        if ($userType === 'employee' && $userId) {
+            $query->where('user_id', $userId);
+        }
+        $query->update(['is_read' => true]);
+
+        return response()->json(['success' => true]);
+    });
+
+    Route::put('/notifications/read-one', function (Request $request) {
+        if (!$request->id) return response()->json(['error' => 'ID required'], 400);
+        \App\Models\Notification::where('id', $request->id)->update(['is_read' => true]);
+        return response()->json(['success' => true]);
+    });
 });
