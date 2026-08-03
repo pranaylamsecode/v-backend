@@ -35,8 +35,6 @@ class DBProjectController extends Controller
         }
         return response()->json(['error' => 'Not found'], 404);
     }
-        return response()->json(['error' => 'Not found'], 404);
-    }
 
     public function destroy(Request $request)
     {
