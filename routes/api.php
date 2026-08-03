@@ -127,6 +127,39 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/employee/work-logs', [WorkLogController::class, 'employeeIndex']);
         Route::post('/employee/work-logs', [WorkLogController::class, 'store']);
+        
+        Route::get('/employee/overview-stats', function (Request $request) {
+            $user = $request->user();
+            
+            $pendingTasks = \App\Models\EmployeeTask::where('employee_id', $user->id)
+                ->where('status', 'PENDING')
+                ->count();
+                
+            $activeProjects = $user->projects()->where('status', 'IN_PROGRESS')->count();
+            
+            $hoursLoggedThisWeek = \App\Models\WorkLog::where('employee_id', $user->id)
+                ->where('date', '>=', now()->startOfWeek())
+                ->sum('hours');
+                
+            $recentTasks = \App\Models\EmployeeTask::where('employee_id', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->take(3)
+                ->get();
+                
+            $recentLogs = \App\Models\WorkLog::with(['project', 'task'])
+                ->where('employee_id', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->take(3)
+                ->get();
+                
+            return response()->json([
+                'pendingTasks' => $pendingTasks,
+                'activeProjects' => $activeProjects,
+                'hoursLoggedThisWeek' => $hoursLoggedThisWeek,
+                'recentTasks' => $recentTasks,
+                'recentLogs' => $recentLogs
+            ]);
+        });
     });
 
     Route::get('/work-logs', [WorkLogController::class, 'index']);
@@ -137,7 +170,25 @@ Route::middleware('auth:sanctum')->group(function () {
         $pendingProjectsCount = \App\Models\DBProject::where('status', 'PENDING')->count();
         $totalLeads = \App\Models\Lead::count();
 
-        // Get tasks grouped by employee
+        // Project Status Distribution
+        $projectsByStatus = \App\Models\DBProject::selectRaw('status, count(*) as count')
+            ->groupBy('status')
+            ->get();
+            
+        // Lead Status Distribution
+        $leadsByStatus = \App\Models\Lead::selectRaw('status, count(*) as count')
+            ->groupBy('status')
+            ->get();
+
+        // Get top 5 performers (by total completed tasks)
+        $topPerformers = \App\Models\Employee::withCount(['tasks as completed_tasks_count' => function ($query) {
+                $query->where('status', 'COMPLETED');
+            }])
+            ->orderByDesc('completed_tasks_count')
+            ->take(5)
+            ->get(['id', 'name', 'position', 'photo_url']);
+
+        // Get tasks grouped by employee (for progress tracking)
         $employeeTasks = \App\Models\Employee::with('tasks')->get()->map(function ($emp) {
             $tasks = $emp->tasks;
             return [
@@ -162,9 +213,11 @@ Route::middleware('auth:sanctum')->group(function () {
             'activeProjectsCount' => $activeProjectsCount,
             'pendingProjectsCount' => $pendingProjectsCount,
             'totalLeads' => $totalLeads,
+            'projectsByStatus' => $projectsByStatus,
+            'leadsByStatus' => $leadsByStatus,
+            'topPerformers' => $topPerformers,
             'employeeTasks' => $employeeTasks,
-            'recentTasks' => $recentTasks,
-            'totalVisits' => rand(100, 500) // Mocking this since no visitor tracking table exists
+            'recentTasks' => $recentTasks
         ]);
     });
 });
