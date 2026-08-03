@@ -269,4 +269,76 @@ Route::middleware('auth:sanctum')->group(function () {
             'data' => $reports
         ]);
     });
+
+    // ========== CLIENT ASSETS ==========
+    Route::get('/client-assets', function () {
+        return response()->json(
+            \App\Models\ClientAsset::with(['lead:id,name,position,photo_url', 'features.assignedEmployee:id,name'])->orderBy('created_at', 'desc')->get()
+        );
+    });
+
+    Route::post('/client-assets', function (Request $request) {
+        $asset = \App\Models\ClientAsset::create($request->all());
+        return response()->json($asset->load(['lead', 'features']), 201);
+    });
+
+    Route::put('/client-assets', function (Request $request) {
+        if (!$request->id) return response()->json(['error' => 'ID required'], 400);
+        $asset = \App\Models\ClientAsset::find($request->id);
+        if (!$asset) return response()->json(['error' => 'Not found'], 404);
+        $asset->update($request->except(['id', 'features', 'lead']));
+        return response()->json($asset->load(['lead', 'features.assignedEmployee']));
+    });
+
+    Route::delete('/client-assets', function (Request $request) {
+        if (!$request->query('id')) return response()->json(['error' => 'ID required'], 400);
+        \App\Models\ClientAsset::destroy($request->query('id'));
+        return response()->json(['success' => true]);
+    });
+
+    // ========== ASSET FEATURES ==========
+    Route::post('/asset-features', function (Request $request) {
+        $feature = \App\Models\AssetFeature::create($request->all());
+        return response()->json($feature->load('assignedEmployee'), 201);
+    });
+
+    Route::put('/asset-features', function (Request $request) {
+        if (!$request->id) return response()->json(['error' => 'ID required'], 400);
+        $feature = \App\Models\AssetFeature::find($request->id);
+        if (!$feature) return response()->json(['error' => 'Not found'], 404);
+        $feature->update($request->except(['id', 'assignedEmployee', 'task']));
+        return response()->json($feature->load('assignedEmployee'));
+    });
+
+    Route::delete('/asset-features', function (Request $request) {
+        if (!$request->query('id')) return response()->json(['error' => 'ID required'], 400);
+        \App\Models\AssetFeature::destroy($request->query('id'));
+        return response()->json(['success' => true]);
+    });
+
+    // Assign a feature to an employee -> auto-create a task
+    Route::post('/asset-features/assign', function (Request $request) {
+        $feature = \App\Models\AssetFeature::find($request->feature_id);
+        if (!$feature) return response()->json(['error' => 'Feature not found'], 404);
+
+        $asset = $feature->asset;
+
+        // Create an employee task automatically
+        $task = \App\Models\EmployeeTask::create([
+            'employee_id' => $request->employee_id,
+            'title' => $feature->title,
+            'description' => ($feature->description ? $feature->description . "\n\n" : '') . "Project: " . $asset->project_name . " (" . $asset->client_name . ")",
+            'status' => 'PENDING',
+            'due_date' => $request->due_date ?? null,
+        ]);
+
+        // Update the feature
+        $feature->update([
+            'assigned_employee_id' => $request->employee_id,
+            'task_id' => $task->id,
+            'status' => 'ASSIGNED',
+        ]);
+
+        return response()->json($feature->load('assignedEmployee'));
+    });
 });
