@@ -220,4 +220,53 @@ Route::middleware('auth:sanctum')->group(function () {
             'recentTasks' => $recentTasks
         ]);
     });
+
+    Route::get('/reports', function (Request $request) {
+        $month = $request->query('month', date('m'));
+        $year = $request->query('year', date('Y'));
+        
+        $startDate = \Carbon\Carbon::createFromDate($year, $month, 1)->startOfMonth();
+        $endDate = \Carbon\Carbon::createFromDate($year, $month, 1)->endOfMonth();
+
+        $employees = \App\Models\Employee::all();
+        
+        $reports = $employees->map(function ($emp) use ($startDate, $endDate) {
+            // Tasks completed in this month
+            $completedTasks = \App\Models\EmployeeTask::where('employee_id', $emp->id)
+                ->where('status', 'COMPLETED')
+                ->whereBetween('updated_at', [$startDate, $endDate])
+                ->count();
+                
+            // Total hours logged in this month
+            $hoursLogged = \App\Models\WorkLog::where('employee_id', $emp->id)
+                ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->sum('hours');
+                
+            // Attendance stats for this month
+            $attendances = \App\Models\Attendance::where('employeeId', $emp->id)
+                ->whereBetween('date', [$startDate, $endDate])
+                ->get();
+                
+            $daysPresent = $attendances->where('status', 'PRESENT')->count();
+            $daysAbsent = $attendances->where('status', 'ABSENT')->count();
+            $daysLeave = $attendances->where('status', 'LEAVE')->count();
+
+            return [
+                'employee_id' => $emp->id,
+                'employee_name' => $emp->name,
+                'employee_position' => $emp->position,
+                'completed_tasks' => $completedTasks,
+                'hours_logged' => $hoursLogged,
+                'days_present' => $daysPresent,
+                'days_absent' => $daysAbsent,
+                'days_leave' => $daysLeave,
+            ];
+        });
+
+        return response()->json([
+            'month' => $month,
+            'year' => $year,
+            'data' => $reports
+        ]);
+    });
 });
