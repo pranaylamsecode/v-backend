@@ -17,6 +17,8 @@ class ApiTokenMiddleware
     {
         if ($request->hasCookie('auth_token')) {
             $request->headers->set('Authorization', 'Bearer ' . $request->cookie('auth_token'));
+        } elseif ($request->hasCookie('employee_auth_token')) {
+            $request->headers->set('Authorization', 'Bearer ' . $request->cookie('employee_auth_token'));
         }
 
         if (!$request->headers->has('Accept')) {
