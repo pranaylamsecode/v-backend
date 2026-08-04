@@ -14,6 +14,7 @@ use App\Http\Controllers\EmployeeAuthController;
 use App\Http\Controllers\WorkLogController;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/employee/login', [EmployeeAuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -92,8 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     
-    // Employee specific routes
-    Route::post('/employee/login', [EmployeeAuthController::class, 'login']);
+    // Employee specific routes (employee/login is defined outside auth:sanctum above)
     
     // For employee dashboard, protected by sanctum
     Route::middleware('auth:sanctum')->group(function () {

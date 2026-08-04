@@ -16,7 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(\App\Http\Middleware\ApiTokenMiddleware::class);
         $middleware->trustProxies(at: '*');
-        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : (Route::has('login') ? route('login') : null));
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : (Route::has('login') ? route('login') : '/'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

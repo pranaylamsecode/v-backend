@@ -28,7 +28,8 @@ class EmployeeAuthController extends Controller
         return response()->json([
             'message' => 'Login successful',
             'user' => $employee,
-            'role' => 'employee'
+            'role' => 'employee',
+            'token' => $token
         ])->withCookie($cookie);
     }
 
